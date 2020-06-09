@@ -75,8 +75,9 @@ export class ContentUploaderComponent implements OnInit, AfterViewInit, OnDestro
   public sourcingOrgReviewer: boolean;
   public sourcingReviewStatus: string;
   azurFileUploaderSubscrition: Subscription;
-  fileUplaoderProgress = {
-    progress: 0
+  fileUplaoderProgress: any = {
+    progress: 0,
+    bytesUploaded: 0
   };
 
   constructor(public toasterService: ToasterService, private userService: UserService,
@@ -328,6 +329,8 @@ export class ContentUploaderComponent implements OnInit, AfterViewInit, OnDestro
       // tslint:disable-next-line:max-line-length
       this.azurFileUploaderSubscrition = this.azureUploadFileService.uploadToBlob(signedURL, this.uploader.getFile(0)).subscribe((event: any) => {
         this.fileUplaoderProgress.progress = event.percentComplete;
+        this.fileUplaoderProgress['estimatedTime'] = event.estimatedTime;
+        this.fileUplaoderProgress['bytesUploaded'] = this.formatBytes(event.bytesUploaded);
       }, (error) => {
         console.log('Failed');
         console.error(error);

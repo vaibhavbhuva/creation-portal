@@ -23,6 +23,7 @@ export class AzureFileUploaderService {
   azurObserver;
   fileReqBlocks = [];
   reader = new FileReader();
+  timeStarted;
   constructor(
     private httpClient: HttpClient
   ) { }
@@ -38,11 +39,12 @@ export class AzureFileUploaderService {
   }
 
   handleFileSelect() {
+    this.timeStarted = new Date();
     this.fileReqBlocks = [];
     this.currentFilePointer = 0;
     this.totalBytesRemaining = 0;
     this.bytesUploaded = 0;
-    this.maxBlockSize = 10 * 1024 * 1024; // Each file will be split in 50 MB.
+    this.maxBlockSize = 5 * 1024 * 1024; // Each file will be split in 50 MB.
     this.blockIds = [];
     const fileSize = this.selectedFile.size;
     console.log('fileSize::::', fileSize);
@@ -82,6 +84,7 @@ export class AzureFileUploaderService {
     } else {
       console.log('createBlocks::::');
       this.createBlocks().subscribe((data: any) => {
+        this.fileReqBlocks = [];
         this.commitBlockList();
       }, (err) => {
         this.azurObserver.error(err);
@@ -97,11 +100,52 @@ export class AzureFileUploaderService {
             this.bytesUploaded += data.requestData.length;
             const percentComplete = ((parseFloat(_.toNumber(this.bytesUploaded)) / parseFloat(this.selectedFile.size)) * 100).toFixed(2);
             console.log(percentComplete + ' %');
-            this.azurObserver.next({percentComplete});
+            const estimatedTime = this.doEstimateTimeCalculation();
+            this.azurObserver.next({percentComplete, estimatedTime, bytesUploaded: this.bytesUploaded});
             return res;
         }));
       })
     );
+  }
+
+  doEstimateTimeCalculation() {
+    const timeEnded: any = new Date();
+    const timeElapsed: any = timeEnded - this.timeStarted; // Assuming that timeStarted is a Date Object
+    const uploadSpeed = Math.floor(this.bytesUploaded / (timeElapsed / 1000)); // Upload speed in second
+    let estimatedSecondsLeft: any = Math.round(((this.selectedFile.size - this.bytesUploaded) / uploadSpeed));
+    estimatedSecondsLeft  = this.humanizeDuration(estimatedSecondsLeft, 'seconds');
+    return estimatedSecondsLeft;
+  }
+
+  humanizeDuration(duration, unit) {
+    let minutes, seconds, hours, days;
+    if (!_.isNumber(duration)) {
+      throw new TypeError('Value must be a number.');
+    }
+
+    if (unit === 'sec' || unit === 'seconds') {
+      seconds = duration;
+    } else if (unit === 'ms' || unit === 'milliseconds' || !unit) {
+      seconds = Math.floor(duration / 1000);
+    } else {
+      throw new TypeError('Unit must be seconds or milliseconds');
+    }
+
+    minutes = Math.floor(seconds / 60);
+    seconds = seconds % 60;
+    hours = Math.floor(minutes / 60);
+    minutes = minutes % 60;
+    days = Math.floor(hours / 24);
+    hours = hours % 24;
+
+    const parts = {days, hours, minutes, seconds};
+    const remaining = Object.keys(parts)
+      .map(part => {
+        if (!parts[part]) { return; }
+        return `${parts[part]} ${part}`;
+      })
+      .join(' ');
+    return remaining;
   }
 
   commitBlock(fileContent) {
