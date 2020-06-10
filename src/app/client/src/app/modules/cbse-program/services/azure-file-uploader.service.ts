@@ -17,9 +17,8 @@ export class AzureFileUploaderService {
   totalBytesRemaining = 0;
   blockIds = [];
   blockIdPrefix = 'block-';
-  submitUri = null;
   bytesUploaded = 0;
-  signedURL = '';
+  signedURL = null;
   azurObserver;
   fileReqBlocks = [];
   reader = new FileReader();
@@ -29,7 +28,7 @@ export class AzureFileUploaderService {
   ) { }
 
 
-  uploadToBlob(signedURL: string, file) {
+  uploadToBlob(signedURL: string, file: any) {
     this.signedURL = signedURL;
     this.selectedFile = file;
     return new Observable((observer) => {
@@ -42,9 +41,8 @@ export class AzureFileUploaderService {
     this.timeStarted = new Date();
     this.fileReqBlocks = [];
     this.currentFilePointer = 0;
-    this.totalBytesRemaining = 0;
     this.bytesUploaded = 0;
-    this.maxBlockSize = 5 * 1024 * 1024; // Each file will be split in 50 MB.
+    this.maxBlockSize = 1 * 1024 * 1024; // Each file will be split in 50 MB.
     this.blockIds = [];
     const fileSize = this.selectedFile.size;
     console.log('fileSize::::', fileSize);
@@ -60,8 +58,8 @@ export class AzureFileUploaderService {
     }
     console.log('total blocks = ' + this.numberOfBlocks);
     const indexOfQueryStart = this.signedURL.indexOf('?');
-    this.submitUri = this.signedURL.substring(0, indexOfQueryStart) + this.signedURL.substring(indexOfQueryStart);
-    console.log(this.submitUri);
+    this.signedURL = this.signedURL.substring(0, indexOfQueryStart) + this.signedURL.substring(indexOfQueryStart);
+    console.log(this.signedURL);
     this.uploadFileInBlocks();
   }
 
@@ -88,20 +86,20 @@ export class AzureFileUploaderService {
         this.commitBlockList();
       }, (err) => {
         this.azurObserver.error(err);
-        this.azurObserver.complete();
       });
     }
   }
 
   createBlocks(): Observable<any> {
-    return forkJoin(
+    return  forkJoin(
       this.fileReqBlocks.map(data => {
         return this.addBlock(data.uri, data.requestData).pipe(map(res => {
             this.bytesUploaded += data.requestData.length;
-            const percentComplete = ((parseFloat(_.toNumber(this.bytesUploaded)) / parseFloat(this.selectedFile.size)) * 100).toFixed(2);
+            // tslint:disable-next-line:max-line-length
+            const percentComplete = ((parseFloat(_.toNumber(this.bytesUploaded)) / this.selectedFile.size) * 100).toFixed();
             console.log(percentComplete + ' %');
             const estimatedTime = this.doEstimateTimeCalculation();
-            this.azurObserver.next({percentComplete, estimatedTime, bytesUploaded: this.bytesUploaded});
+            this.azurObserver.next({percentComplete: percentComplete, estimatedTime, bytesUploaded: this.bytesUploaded});
             return res;
         }));
       })
@@ -113,6 +111,9 @@ export class AzureFileUploaderService {
     const timeElapsed: any = timeEnded - this.timeStarted; // Assuming that timeStarted is a Date Object
     const uploadSpeed = Math.floor(this.bytesUploaded / (timeElapsed / 1000)); // Upload speed in second
     let estimatedSecondsLeft: any = Math.round(((this.selectedFile.size - this.bytesUploaded) / uploadSpeed));
+    if (!estimatedSecondsLeft) {
+      return;
+    }
     estimatedSecondsLeft  = this.humanizeDuration(estimatedSecondsLeft, 'seconds');
     return estimatedSecondsLeft;
   }
@@ -151,7 +152,7 @@ export class AzureFileUploaderService {
   commitBlock(fileContent) {
     this.reader.onloadend =  ((evt: any) => {
       if (evt.target.readyState === FileReader.DONE) {
-        const uri = this.submitUri + '&comp=block&blockid=' + this.blockIds[this.blockIds.length - 1];
+        const uri = this.signedURL + '&comp=block&blockid=' + this.blockIds[this.blockIds.length - 1];
         const requestData = new Uint8Array(evt.target.result);
         this.fileReqBlocks.push({uri, requestData});
         this.uploadFileInBlocks();
@@ -161,7 +162,7 @@ export class AzureFileUploaderService {
   }
 
   commitBlockList() {
-    const uri = this.submitUri + '&comp=blocklist';
+    const uri = this.signedURL + '&comp=blocklist';
     console.log('commitBlockList :: ', uri);
     let requestBody = '<?xml version="1.0" encoding="utf-8"?><BlockList>';
     for (let i = 0; i < this.blockIds.length; i++) {
@@ -171,10 +172,9 @@ export class AzureFileUploaderService {
     console.log('commitBlockList ::' , requestBody);
 
     this.addBlockList(uri, requestBody).subscribe((event) => {
-      this.azurObserver.next('completed');
       this.azurObserver.complete();
     }, (error) => {
-      console.log(error);
+      this.azurObserver.error(error);
     });
   }
 
@@ -191,12 +191,12 @@ export class AzureFileUploaderService {
       );
   }
 
-  addBlock (uri: string, requestData: any): Observable<any> {
+  addBlock(uri: string, requestData: any): Observable<any> {
 
     return new Observable((observer) => {
       const fetchPromise = fetch(uri, {
         'headers': {
-          'Content-Type': 'video/mp4',
+          'Content-Type': this.selectedFile.type,
           'x-ms-blob-type': 'BlockBlob'
         },
         'body': requestData,

@@ -192,9 +192,9 @@
           <div class='d-flex flex-dc flex-jc-center flex-ai-center icon'>
             <img src="assets/images/loader.gif" width="64" class='process-icon'>
             <div class="fs-0-785 pt-16">
-              {{fileUplaoderProgress.bytesUploaded}}/{{fileUplaoderProgress?.size}} Uploading Files ({{fileUplaoderProgress.progress}}%) 
+              <b>{{fileUplaoderProgress.bytesUploaded}}/{{fileUplaoderProgress?.size}}</b> Uploading Files (<b>{{fileUplaoderProgress.progress}}%</b>) 
             </div>
-            <div class="fs-0-785 pt-16">Estimated Time Remaining: {{fileUplaoderProgress?.estimatedTime}}
+            <div class="fs-0-785 pt-16" *ngIf="fileUplaoderProgress.estimatedTime" >Estimated Time Remaining: <b>{{fileUplaoderProgress?.estimatedTime}}</b>
             </div>
             <sui-progress [value]="fileUplaoderProgress.progress" [maximum]="100" class="mb-0 mr-0"></sui-progress>
           </div>

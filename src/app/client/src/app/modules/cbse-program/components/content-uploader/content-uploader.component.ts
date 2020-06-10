@@ -79,6 +79,7 @@ export class ContentUploaderComponent implements OnInit, AfterViewInit, OnDestro
     progress: 0,
     bytesUploaded: 0
   };
+  sizes: any = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
 
   constructor(public toasterService: ToasterService, private userService: UserService,
     private publicDataService: PublicDataService, public actionService: ActionService,
@@ -202,7 +203,15 @@ export class ContentUploaderComponent implements OnInit, AfterViewInit, OnDestro
         }
       }
     });
+    this.resetFineUploaderProgress();
     this.fineUploaderUI.nativeElement.remove();
+  }
+
+  resetFineUploaderProgress() {
+    this.fileUplaoderProgress = {
+      progress: 0,
+      bytesUploaded: 0
+    };
   }
 
   uploadContent() {
@@ -231,10 +240,9 @@ export class ContentUploaderComponent implements OnInit, AfterViewInit, OnDestro
     if (bytes === 0) { return '0 Bytes'; }
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-}
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + this.sizes[i];
+  }
 
 
   uploadByURL(fileUpload, mimeType) {
