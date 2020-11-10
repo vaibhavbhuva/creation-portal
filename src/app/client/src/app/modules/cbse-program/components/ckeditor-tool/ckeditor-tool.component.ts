@@ -1,5 +1,6 @@
 import { Component, OnInit, AfterViewInit, Output, Input, EventEmitter, OnChanges, ViewChild, ElementRef } from '@angular/core';
-import * as ClassicEditor from '@project-sunbird/ckeditor-build-font';
+// import * as ClassicEditor from '@project-sunbird/ckeditor-build-font';
+import InlineEditor from 'ckeditor5-custom-build-inline';
 import { FineUploader } from 'fine-uploader';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ConfigService, ResourceService, IUserData, IUserProfile, ToasterService } from '@sunbird/shared';
@@ -9,6 +10,7 @@ import { catchError, map} from 'rxjs/operators';
 import { throwError, Observable} from 'rxjs';
 import { CbseProgramService } from '../../services';
 import MathText from '../../../../../assets/libs/mathEquation/plugin/mathTextPlugin.js';
+import CustomInsertImage from './ck-insert-image-plugin.js';
 
 @Component({
   selector: 'app-ckeditor-tool',
@@ -41,6 +43,8 @@ export class CkeditorToolComponent implements OnInit, AfterViewInit, OnChanges {
   uploader;
   initialized = false;
   public assetProxyUrl = '/assets/public/';
+  public lastImgResizeWidth;
+
   constructor(
     private activatedRoute: ActivatedRoute,
     private router: Router,
@@ -98,7 +102,7 @@ export class CkeditorToolComponent implements OnInit, AfterViewInit, OnChanges {
       });
     this.editorConfig = _.assign({
       toolbar: ['bold', '|', 'italic', '|', 'underline',
-        '|', 'numberedList', '|', 'fontSize', '|', 'subscript', '|', 'superscript', '|', 'MathText', '|'
+        '|', 'numberedList', '|', 'fontSize', '|', 'subscript', '|', 'superscript', '|', 'MathText', '|', 'customInsertImage'
       ],
       fontSize: {
         options: [
@@ -114,7 +118,30 @@ export class CkeditorToolComponent implements OnInit, AfterViewInit, OnChanges {
         ]
       },
       image: {
-        toolbar: ['imageStyle:alignLeft', 'imageStyle:full', 'imageStyle:alignRight'],
+        resizeEnabled : false,
+        resizeOptions: [
+            {
+                name: 'imageResize:original',
+                label: 'Original',
+                value: null
+            },
+            {
+              name: 'imageResize:25',
+              label: '25%',
+              value: '25'
+            },
+            {
+                name: 'imageResize:50',
+                label: '50%',
+                value: '50'
+            },
+            {
+                name: 'imageResize:75',
+                label: '75%',
+                value: '75'
+            }
+        ],
+        toolbar: ['imageStyle:alignLeft', 'imageStyle:full', 'imageStyle:alignRight', '|', 'imageResize'],
         styles: ['full', 'alignLeft', 'alignRight', 'alignCenter']
       },
       isReadOnly: false,
@@ -236,9 +263,51 @@ export class CkeditorToolComponent implements OnInit, AfterViewInit, OnChanges {
     return result.toString();
   }
 
+  customImageResizer(editor)  {
+    // Both the data and the editing pipelines are affected by this conversion.
+    editor.conversion.for('downcast').add(dispatcher => {
+      // Links are represented in the model as a "linkHref" attribute.
+      // Use the "low" listener priority to apply the changes after the link feature.
+      dispatcher.on('attribute:width:image', (evt, data, conversionApi) => {
+        if (!conversionApi.consumable.consume(data.item, evt.name)) {
+          return;
+        }
+        const options = editor.config.get( 'image.resizeOptions' );
+        const isEnabled = editor.config.get( 'image.resizeEnabled' );
+        const sizeLables = options.map((item) => {
+          return item.label;
+        });
+        const newImgWidthValue = data.attributeNewValue === null ? 'Original' : data.attributeNewValue;
+        if (sizeLables.includes(newImgWidthValue)) {
+          this.lastImgResizeWidth = newImgWidthValue;
+        }
+
+        if (!isEnabled && sizeLables.length > 0 && !sizeLables.includes(newImgWidthValue)) {
+          editor.execute( 'imageResize', { width: this.lastImgResizeWidth } );
+          return evt.stop();
+        }
+
+        const viewWriter = conversionApi.writer;
+        const figure = conversionApi.mapper.toViewElement(data.item);
+
+        if (data.attributeNewValue !== null) {
+          viewWriter.setStyle('width', data.attributeNewValue, figure);
+          viewWriter.addClass('image_resized', figure);
+        } else {
+          viewWriter.removeStyle('width', figure);
+          viewWriter.removeClass('image_resized', figure);
+        }
+      });
+    });
+  }
+
   initializeEditors() {
-    ClassicEditor.create(this.editorRef.nativeElement, {
-      extraPlugins: ['Font', MathText],
+    window.addEventListener('ckShowImagePicker', (evt: any) => {
+      this.showImagePicker = true;
+      this.editorInstance = evt.detail;
+    }, false);
+    InlineEditor.create(this.editorRef.nativeElement, {
+      extraPlugins: ['Font', MathText, this.customImageResizer, CustomInsertImage],
       toolbar: this.editorConfig.toolbar,
       fontSize: this.editorConfig.fontSize,
       image: this.editorConfig.image,
